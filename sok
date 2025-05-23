@@ -1,1 +1,1130 @@
+-- DROP FUNCTION artefakt.spk_doziadanie(int8);
 
+CREATE OR REPLACE FUNCTION artefakt.spk_doziadanie(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, datum_oznamenia text, datum_predlzenia_lehoty_do text, lehota_do text, pocet_dni_predlzenia bigint, procesny_ukon text, spravny_organ text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id,
+        k.cislo_konania,
+        TO_CHAR(d.datum_oznamenia, 'DD.MM.YYYY') AS datum_oznamenia,
+        TO_CHAR(d.datum_predlzenia_lehoty_do, 'DD.MM.YYYY') AS datum_predlzenia_lehoty_do,
+        TO_CHAR(d.lehota_do, 'DD.MM.YYYY') AS lehota_do,
+        d.pocet_dni_predlzenia,
+        d.procesny_ukon,
+        d.spravny_organ
+        --d.zabezpecenie_konania_id
+    FROM spk.doziadanie d
+    INNER JOIN spk.zabezpecenie_konania zk
+        ON d.zabezpecenie_konania_id = zk.zabezpecenie_konania_id 
+        AND zk.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k
+        ON k.spk_konanie_id = zk.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    WHERE 
+        d.transakcia_zrusene_id IS NULL
+        AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_konanie(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_konanie(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, datum_dorucenia_oznamenia text, datum_odoslania_oznamenia text, datum_oznamenia_o_predlzeni_lehoty text, datum_ukoncenia_konania text, datum_zastavenia_konania text, datum_ziadosti_o_predlzenie_lehoty text, datum_vytvorenia_konania text, datum_zacatia_konania text, stupen_konania_kod character varying, stupen_konania_nazov text, dovod_zacatia_konania_kod text, dovod_zacatia_konania_nazov text, dovod_zastavenia_konania_kod text, dovod_zastavenia_konania_nazov text, dorucovanie_verejnou_vyhlaskou text, stav_konania_kod character varying, stav_konania_nazov text, cislo_kontroly text, kategoria_konania_kod text, kategoria_konania_nazov text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id,
+        k.cislo_konania,
+        TO_CHAR(k.datum_dorucenia_oznamenia, 'DD.MM.YYYY') AS datum_dorucenia_oznamenia,
+        TO_CHAR(k.datum_odoslania_oznamenia, 'DD.MM.YYYY') AS datum_odoslania_oznamenia,
+        TO_CHAR(k.datum_oznamenia_o_predlzeni_lehoty, 'DD.MM.YYYY') AS datum_oznamenia_o_predlzeni_lehoty,
+        TO_CHAR(k.datum_ukoncenia_konania, 'DD.MM.YYYY') AS datum_ukoncenia_konania,
+        TO_CHAR(k.datum_zastavenia_konania, 'DD.MM.YYYY') AS datum_zastavenia_konania,
+        TO_CHAR(k.datum_ziadosti_o_predlzenie_lehoty, 'DD.MM.YYYY') AS datum_ziadosti_o_predlzenie_lehoty,
+        TO_CHAR(k.datum_vytvorenia_konania, 'DD.MM.YYYY') AS datum_vytvorenia_konania,
+        TO_CHAR(k.datum_zacatia_konania, 'DD.MM.YYYY') AS datum_zacatia_konania,
+		esk.kod AS stupen_konania_kod,        
+		esk.nazov AS stupen_konania_nazov,
+		cdzk.kod AS dovod_zacatia_konania_kod,
+        cdzk.nazov AS dovod_zacatia_konania_nazov,
+		cdzkz.kod AS dovod_zastavenia_konania_kod,
+        cdzkz.nazov AS dovod_zastavenia_konania_nazov,
+        CASE WHEN k.dorucovanie_verejnou_vyhlaskou THEN 'áno' ELSE 'nie' END AS dorucovanie_verejnou_vyhlaskou,
+		eskon.kod AS stav_konania_kod,
+        eskon.nazov AS stav_konania_nazov,
+		kontrola.cislo_kontroly AS cislo_kontroly,
+		kategoria_konania.cis_kategoria_konania_kod AS kategoria_konania_kod,
+        kategoria_konania.cis_kategoria_konania_nazov AS kategoria_konania_nazov
+    FROM spk.spk_konanie k
+    LEFT JOIN cis.enum_stupen_konania esk ON k.enum_stupen_konania_kod = esk.kod
+    LEFT JOIN cis.cis_dovod_zacatia_konania cdzk ON k.cis_dovod_zacatia_konania_id = cdzk.cis_dovod_zacatia_konania_id AND cdzk.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.cis_dovod_zastavenia_konania cdzkz ON k.cis_dovod_zastavenia_konania_id = cdzkz.cis_dovod_zastavenia_konania_id AND cdzkz.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.enum_stav_konania eskon ON k.enum_stav_konania_kod = eskon.kod 
+    LEFT JOIN cis.enum_modul em ON k.enum_modul_kod = em.kod 
+    LEFT JOIN vkc.kontrola kontrola ON k.kontrola_id = kontrola.kontrola_id AND kontrola.transakcia_zrusene_id IS NULL
+    LEFT JOIN artefakt.uni_cis_kategoria_konania_dovod_zacatia kategoria_konania on kategoria_konania.cis_dovod_zacatia_konania_id = cdzk.cis_dovod_zacatia_konania_id
+    WHERE (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id) AND k.transakcia_zrusene_id IS NULL;
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_konanie_ksed_spis(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_konanie_ksed_spis(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, spis_nazov_spisu text, spis_cislo_spisu_ksed text, spis_cislo_spisu_v_registrature text, spis_cislo_konania_v_registrature text, spis_datum_vytvorenia text, spis_zastavenie_konania text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        ksed_spis.nazov_spisu AS spis_nazov_spisu, 
+        ksed_spis.cislo_spisu_ksed AS spis_cislo_spisu_ksed, 
+        ksed_spis.cislo_spisu_v_registrature AS spis_cislo_spisu_v_registrature, 
+        ksed_spis.cislo_konania_v_registrature AS spis_cislo_konania_v_registrature, 
+        TO_CHAR(ksed_spis.datum_vytvorenia, 'DD.MM.YYYY') AS spis_datum_vytvorenia, 
+        CASE 
+            WHEN ksed_spis.zastavenie_konania = FALSE THEN 'Konanie nebolo zastavené' 
+            ELSE 'Konanie bolo zastavené' 
+        END AS spis_zastavenie_konania
+    FROM spk.spk_konanie spk_konanie
+    LEFT JOIN dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id
+        AND ksed_spis.transakcia_zrusene_id IS NULL
+    WHERE (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id) 
+    AND spk_konanie.transakcia_zrusene_id IS NULL;
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_kontrola(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_kontrola(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, cislo_kontroly text, kontrola_datum_zaciatku text, kontrola_datum_ukoncenia text, kontrola_datum_uzavretia text, kontrola_kontrolovane_obdobie_od text, kontrola_kontrolovane_obdobie_do text, kontrola_ucel_kontroly text, kontrola_procesny_typ_kontroly text, kontrola_zlozka_zivotneho_prostredia text, kontrola_stav_kontroly text, spis_nazov_spisu text, spis_cislo_spisu_ksed text, spis_cislo_spisu_v_registrature text, spis_cislo_konania_v_registrature text, spis_datum_vytvorenia text, spis_zastavenie_konania text, predpokladana_doba_trvania text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id AS spk_konanie_id, 
+        spk_konanie.cislo_konania AS cislo_konania, 
+        kontrola.cislo_kontroly AS cislo_kontroly, 
+		TO_CHAR(kontrola.datum_zaciatku, 'DD.MM.YYYY') AS kontrola_datum_zaciatku, 
+		TO_CHAR(kontrola.datum_ukoncenia, 'DD.MM.YYYY') AS kontrola_datum_ukoncenia, 
+		TO_CHAR(kontrola.datum_uzavretia, 'DD.MM.YYYY') AS kontrola_datum_uzavretia, 
+		TO_CHAR(kontrola.kontrolovane_obdobie_od, 'DD.MM.YYYY') AS kontrola_kontrolovane_obdobie_od, 
+		TO_CHAR(kontrola.kontrolovane_obdobie_do, 'DD.MM.YYYY') AS kontrola_kontrolovane_obdobie_do, 
+        cis_ucel_kontroly.nazov AS kontrola_ucel_kontroly, 
+        cis_procesny_typ_kontroly.nazov AS kontrola_procesny_typ_kontroly, 
+        cis_zlozka_zivotneho_prostredia.nazov AS kontrola_zlozka_zivotneho_prostredia, 
+        enum_stav_kontroly.nazov AS kontrola_stav_kontroly, 
+        ksed_spis.nazov_spisu AS spis_nazov_spisu, 
+        ksed_spis.cislo_spisu_ksed AS spis_cislo_spisu_ksed, 
+        ksed_spis.cislo_spisu_v_registrature AS spis_cislo_spisu_v_registrature, 
+        ksed_spis.cislo_konania_v_registrature AS spis_cislo_konania_v_registrature, 
+		TO_CHAR(ksed_spis.datum_vytvorenia, 'DD.MM.YYYY') AS spis_datum_vytvorenia, 
+        CASE 
+            WHEN ksed_spis.zastavenie_konania = FALSE THEN 'Konanie nebolo zastavené' 
+            ELSE 'Konanie bolo zastavené' 
+        END AS spis_zastavenie_konania ,
+		kontrola.predpokladana_doba_trvania:: text
+    FROM spk.spk_konanie
+    INNER JOIN vkc.kontrola
+        ON kontrola.kontrola_id = spk_konanie.kontrola_id AND kontrola.transakcia_zrusene_id IS NULL
+    LEFT JOIN dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = kontrola.ksed_spis_id
+        AND ksed_spis.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.cis_procesny_typ_kontroly 
+        ON cis_procesny_typ_kontroly.cis_procesny_typ_kontroly_id = kontrola.cis_procesny_typ_kontroly_id
+        AND cis_procesny_typ_kontroly.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.cis_ucel_kontroly 
+        ON cis_ucel_kontroly.cis_ucel_kontroly_id = kontrola.cis_ucel_kontroly_id
+        AND cis_ucel_kontroly.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.enum_stav_kontroly 
+        ON enum_stav_kontroly.kod = kontrola.enum_stav_kontroly_kod
+    LEFT JOIN cis.cis_zlozka_zivotneho_prostredia 
+        ON cis_zlozka_zivotneho_prostredia.cis_zlozka_zivotneho_prostredia_id = cis_procesny_typ_kontroly.cis_zlozka_zivotneho_prostredia_id
+        AND cis_zlozka_zivotneho_prostredia.transakcia_zrusene_id IS NULL
+    WHERE kontrola.transakcia_zrusene_id IS NULL
+    AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_odvolanie_voci_rozhodnutiu(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_odvolanie_voci_rozhodnutiu(p_ksed_spis_id bigint)
+ RETURNS TABLE(odvolanie_voci_rozhodnutiu_id bigint, datum_pod_navrhu_na_mimo_odv_kon text, datum_pod_navrhu_na_obnovu_kon text, datum_prijatia_odvolania text, datum_rozhodnutia_o_odvolani text, datum_upovedomenia_o_odvolani text, vylucenie_odkladneho_ucinku text, cislo_rozhodnutia character varying, sposob_rozhodnutia_kod text, sposob_rozhodnutia_nazov text, typ_odvolania_kod text, typ_odvolania_nazov text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ov.odvolanie_voci_rozhodnutiu_id,
+        TO_CHAR(ov.datum_podania_navrhu_na_mimo_odvolacie_konanie, 'DD.MM.YYYY') AS datum_pod_navrhu_na_mimo_odv_kon,
+        TO_CHAR(ov.datum_podania_navrhu_na_obnovu_konania, 'DD.MM.YYYY') AS datum_pod_navrhu_na_obnovu_kon,
+        TO_CHAR(ov.datum_prijatia_odvolania, 'DD.MM.YYYY') AS datum_prijatia_odvolania,
+        TO_CHAR(ov.datum_rozhodnutia_o_odvolani, 'DD.MM.YYYY') AS datum_rozhodnutia_o_odvolani,
+        TO_CHAR(ov.datum_upovedomenia_o_odvolani, 'DD.MM.YYYY') AS datum_upovedomenia_o_odvolani,
+        CASE WHEN ov.vylucenie_odkladneho_ucinku THEN 'áno' ELSE 'nie' END AS vylucenie_odkladneho_ucinku,
+        r.cislo_rozhodnutia,
+        csr.kod AS sposob_rozhodnutia_kod,
+        csr.nazov AS sposob_rozhodnutia_nazov,
+        cto.kod AS typ_odvolania_kod,
+        cto.nazov AS typ_odvolania_nazov
+        --,ov.zucastneny_subjekt_id
+    FROM 
+        spk.odvolanie_voci_rozhodnutiu ov
+    INNER JOIN 
+        spk.rozhodnutie r ON ov.rozhodnutie_id = r.rozhodnutie_id and r.transakcia_zrusene_id IS NULL
+    INNER JOIN 
+        spk.spk_konanie k ON r.spk_konanie_id = k.spk_konanie_id and k.transakcia_zrusene_id IS NULL
+    LEFT JOIN 
+        cis.cis_sposob_rozhodnutia_v_odvolacom_konani csr ON ov.cis_sposob_rozhodnutia_v_odvolacom_konani_id = csr.cis_sposob_rozhodnutia_v_odvolacom_konani_id  and csr.transakcia_zrusene_id IS NULL
+    LEFT JOIN 
+        cis.cis_typ_odvolania cto ON ov.cis_typ_odvolania_id = cto.cis_typ_odvolania_id and cto.transakcia_zrusene_id IS NULL
+    WHERE 
+        ov.transakcia_zrusene_id IS NULL
+        AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_odvolanie_voci_rozhodnutiu_vstupny_dokument(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_odvolanie_voci_rozhodnutiu_vstupny_dokument(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, dokument_nazov text, typ_vstupneho_dokumentu text, priloha_nazov_suboru text, datum_vytvorenia text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        rozhodnutie.rozhodnutie_id,
+        rozhodnutie.cislo_rozhodnutia,
+        dokument.nazov,
+        cis_typ_vstupneho_artefaktu.nazov,
+        priloha.nazov_suboru,
+        TO_CHAR(dokument.datum_vytvorenia, 'DD.MM.YYYY')
+    FROM spk.odvolanie_voci_rozhodnutiu
+    JOIN spk.odvolanie_voci_rozhodnutiu_vstupny_dokument 
+        ON odvolanie_voci_rozhodnutiu_vstupny_dokument.odvolanie_voci_rozhodnutiu_id = odvolanie_voci_rozhodnutiu.odvolanie_voci_rozhodnutiu_id
+        AND odvolanie_voci_rozhodnutiu_vstupny_dokument.transakcia_zrusene_id IS NULL
+    JOIN spk.rozhodnutie 
+        ON rozhodnutie.rozhodnutie_id = odvolanie_voci_rozhodnutiu.rozhodnutie_id
+        AND rozhodnutie.transakcia_zrusene_id IS NULL
+    JOIN spk.spk_konanie 
+        ON spk_konanie.spk_konanie_id = rozhodnutie.spk_konanie_id
+        AND spk_konanie.transakcia_zrusene_id IS NULL
+    JOIN dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id
+        AND ksed_spis.transakcia_zrusene_id IS NULL
+    JOIN dms.vstupny_dokument 
+        ON vstupny_dokument.vstupny_dokument_id = odvolanie_voci_rozhodnutiu_vstupny_dokument.vstupny_dokument_id
+        AND vstupny_dokument.transakcia_zrusene_id IS NULL
+    JOIN dms.dokument 
+        ON dokument.ksed_spis_id = ksed_spis.ksed_spis_id
+        AND dokument.transakcia_zrusene_id IS NULL
+    JOIN cis.cis_typ_vstupneho_artefaktu 
+        ON cis_typ_vstupneho_artefaktu.cis_typ_vstupneho_artefaktu_id = vstupny_dokument.cis_typ_vstupneho_artefaktu_id
+        AND cis_typ_vstupneho_artefaktu.transakcia_zrusene_id IS NULL
+    LEFT JOIN dms.priloha 
+        ON priloha.dokument_id = dokument.dokument_id
+        AND priloha.transakcia_zrusene_id IS NULL
+    WHERE odvolanie_voci_rozhodnutiu.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+    ORDER BY dokument.datum_vytvorenia, cis_typ_vstupneho_artefaktu.nazov;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_odvolanie_voci_rozhodnutiu_vystupny_dokument(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_odvolanie_voci_rozhodnutiu_vystupny_dokument(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, dokument_nazov text, typ_vystupneho_dokumentu text, priloha_nazov_suboru text, datum_vytvorenia text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        rozhodnutie.rozhodnutie_id,
+        rozhodnutie.cislo_rozhodnutia,
+        dokument.nazov,
+        cis_typ_vystupneho_artefaktu.nazov::text,
+        priloha.nazov_suboru,
+        TO_CHAR(dokument.datum_vytvorenia, 'DD.MM.YYYY')
+    FROM spk.odvolanie_voci_rozhodnutiu
+    JOIN spk.odvolanie_voci_rozhodnutiu_vystupny_dokument 
+        ON odvolanie_voci_rozhodnutiu_vystupny_dokument.odvolanie_voci_rozhodnutiu_id = odvolanie_voci_rozhodnutiu.odvolanie_voci_rozhodnutiu_id
+        AND odvolanie_voci_rozhodnutiu_vystupny_dokument.transakcia_zrusene_id IS NULL
+    JOIN spk.rozhodnutie 
+        ON rozhodnutie.rozhodnutie_id = odvolanie_voci_rozhodnutiu.rozhodnutie_id
+        AND rozhodnutie.transakcia_zrusene_id IS NULL
+    JOIN spk.spk_konanie 
+        ON spk_konanie.spk_konanie_id = rozhodnutie.spk_konanie_id
+        AND spk_konanie.transakcia_zrusene_id IS NULL
+    JOIN dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id
+        AND ksed_spis.transakcia_zrusene_id IS NULL
+    JOIN dms.vystupny_dokument 
+        ON vystupny_dokument.vystupny_dokument_id = odvolanie_voci_rozhodnutiu_vystupny_dokument.vystupny_dokument_id
+        AND vystupny_dokument.transakcia_zrusene_id IS NULL
+    JOIN dms.dokument 
+        ON dokument.ksed_spis_id = ksed_spis.ksed_spis_id
+        AND dokument.transakcia_zrusene_id IS NULL
+    JOIN cis.cis_typ_vystupneho_artefaktu 
+        ON cis_typ_vystupneho_artefaktu.cis_typ_vystupneho_artefaktu_id = vystupny_dokument.cis_typ_vystupneho_artefaktu_id
+        AND cis_typ_vystupneho_artefaktu.transakcia_zrusene_id IS NULL
+    LEFT JOIN dms.priloha 
+        ON priloha.dokument_id = dokument.dokument_id
+        AND priloha.transakcia_zrusene_id IS NULL
+    WHERE odvolanie_voci_rozhodnutiu.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+    ORDER BY dokument.datum_vytvorenia, cis_typ_vystupneho_artefaktu.nazov;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_ohliadka(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_ohliadka(p_ksed_spis_id bigint)
+ RETURNS TABLE(datum_oznamenia_ohliadky text, den_ohliadky_a_cas_zaciatku_ohliadky text, lokalita_opis text, katastralne_uzemie text, sidelna_jednotka text, obec text, ulica text, supisne_cislo text, orientacne_cislo text, psc text, jprl text, cislo_parcely text, adresa text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        TO_CHAR(o.datum_oznamenia_ohliadky, 'DD.MM.YYYY') AS datum_oznamenia_ohliadky,
+        TO_CHAR(o.den_ohliadky_a_cas_zaciatku_ohliadky, 'DD.MM.YYYY HH24:MI') AS den_ohliadky_a_cas_zaciatku_ohliadky,
+        l.lokalita_opis,
+        l.katastralne_uzemie,
+        l.sidelna_jednotka,
+        l.obec::text,
+        l.ulica,
+        l.supisne_cislo,
+        l.orientacne_cislo,
+        l.psc,
+        l.jprl,
+        l.cislo_parcely,
+        l.adresa
+    FROM 
+        spk.ohliadka o
+    LEFT JOIN 
+        artefakt.uni_lokalita l ON l.lokalita_id = o.lokalita_id
+    INNER JOIN 
+        spk.zabezpecenie_konania zk ON zk.zabezpecenie_konania_id = o.zabezpecenie_konania_id AND zk.transakcia_zrusene_id IS NULL
+    INNER JOIN 
+        spk.spk_konanie k ON k.spk_konanie_id = zk.spk_konanie_id AND k.transakcia_zrusene_id IS NULL
+    WHERE 
+        (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id)
+		 AND o.transakcia_zrusene_id IS NULL;
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_organizacna_jednotka(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_organizacna_jednotka(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, org_zlozka_id uuid, organizacia character varying, inspektorat character varying, organizacna_zlozka character varying, ulica character varying, supisne_cislo character varying, orientacne_cislo character varying, psc character varying, obec character varying, kontakt_oz_email character varying, kontakt_oz_telefon character varying, adresa text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        uni_organizacna_jednotka.org_zlozka_id AS org_zlozka_id,
+        uni_organizacna_jednotka.organizacia AS organizacia, 
+        uni_organizacna_jednotka.inspektorat AS inspektorat, 
+        uni_organizacna_jednotka.organizacna_zlozka AS organizacna_zlozka,
+        uni_organizacna_jednotka.ulica AS ulica,
+        uni_organizacna_jednotka.supisne_cislo AS supisne_cislo,
+        uni_organizacna_jednotka.orientacne_cislo AS orientacne_cislo,
+        uni_organizacna_jednotka.psc AS psc,
+        uni_organizacna_jednotka.obec AS obec,
+        uni_organizacna_jednotka.kontakt_oz_email AS kontakt_oz_email,
+        uni_organizacna_jednotka.kontakt_oz_telefon AS kontakt_oz_telefon,
+        COALESCE(uni_organizacna_jednotka.obec, '') ||
+        COALESCE(CASE WHEN uni_organizacna_jednotka.obec IS NULL THEN '' ELSE ', ' END || uni_organizacna_jednotka.ulica, '') ||
+        COALESCE(' ' || uni_organizacna_jednotka.supisne_cislo, '') ||
+        COALESCE(CASE WHEN uni_organizacna_jednotka.supisne_cislo IS NULL THEN '' ELSE '/' END || COALESCE(' ' || uni_organizacna_jednotka.orientacne_cislo, ''), '') AS adresa
+    FROM spk.spk_konanie spk_konanie
+    LEFT JOIN dms.ksed_spis 
+        ON dms.ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id 
+        AND dms.ksed_spis.transakcia_zrusene_id IS NULL
+    LEFT JOIN 
+        artefakt.uni_organizacna_jednotka 
+        ON uni_organizacna_jednotka.org_zlozka_id = dms.ksed_spis.organizacna_zlozka_id
+    WHERE 
+        spk_konanie.transakcia_zrusene_id IS NULL
+        AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_podklad_pre_rozhodnutie_obsolet(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_podklad_pre_rozhodnutie_obsolet(p_ksed_spis_id bigint)
+ RETURNS TABLE(datum_a_cas_obhliadky text, datum_a_cas_ustneho_pojednavania text, datum_dorucenia_znaleckeho_posudku text, datum_odoslania_oboznamenia text, datum_odoslania_predvolania text, datum_odoslania_vyzvy text, datum_oznamenia_o_obhliadke text, datum_oznamenia_o_ustnom_pojednavani text, datum_polozenia_otazky text, datum_predvolania_znalca text, datum_zaevidovania_zapisnice text, datum_zaevidovania_zapisnice_z_obhliadky text, datum_ziadosti_o_listinu text, datum_ziadosti_o_stanovisko text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        TO_CHAR(p.datum_a_cas_obhliadky, 'DD.MM.YYYY HH24:MI:SS') AS datum_a_cas_obhliadky,
+        TO_CHAR(p.datum_a_cas_ustneho_pojednavania, 'DD.MM.YYYY HH24:MI:SS') AS datum_a_cas_ustneho_pojednavania,
+        TO_CHAR(p.datum_dorucenia_znaleckeho_posudku, 'DD.MM.YYYY') AS datum_dorucenia_znaleckeho_posudku,
+        TO_CHAR(p.datum_odoslania_oboznamenia, 'DD.MM.YYYY') AS datum_odoslania_oboznamenia,
+        TO_CHAR(p.datum_odoslania_predvolania, 'DD.MM.YYYY') AS datum_odoslania_predvolania,
+        TO_CHAR(p.datum_odoslania_vyzvy, 'DD.MM.YYYY') AS datum_odoslania_vyzvy,
+        TO_CHAR(p.datum_oznamenia_o_obhliadke, 'DD.MM.YYYY') AS datum_oznamenia_o_obhliadke,
+        TO_CHAR(p.datum_oznamenia_o_ustnom_pojednavani, 'DD.MM.YYYY') AS datum_oznamenia_o_ustnom_pojednavani,
+        TO_CHAR(p.datum_polozenia_otazky, 'DD.MM.YYYY') AS datum_polozenia_otazky,
+        TO_CHAR(p.datum_predvolania_znalca, 'DD.MM.YYYY') AS datum_predvolania_znalca,
+        TO_CHAR(p.datum_zaevidovania_zapisnice, 'DD.MM.YYYY') AS datum_zaevidovania_zapisnice,
+        TO_CHAR(p.datum_zaevidovania_zapisnice_z_obhliadky, 'DD.MM.YYYY') AS datum_zaevidovania_zapisnice_z_obhliadky,
+        TO_CHAR(p.datum_ziadosti_o_listinu, 'DD.MM.YYYY') AS datum_ziadosti_o_listinu,
+        TO_CHAR(p.datum_ziadosti_o_stanovisko, 'DD.MM.YYYY') AS datum_ziadosti_o_stanovisko
+    FROM spk.podklad_pre_rozhodnutie p
+    INNER JOIN spk.spk_konanie k 
+        ON k.spk_konanie_id = p.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    WHERE 
+        p.transakcia_zrusene_id IS NULL
+        AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_predbezne_opatrenie(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_predbezne_opatrenie(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, datum_zaevidovania text, splnene text, kod_dovod_zrusenia text, nazov_dovod_zrusenia text, kod_sankcia_opatrenie text, nazov_sankcia_opatrenie text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT
+        k.spk_konanie_id,
+        k.cislo_konania,
+        TO_CHAR(po.datum_zaevidovania, 'DD.MM.YYYY') AS datum_zaevidovania,
+        CASE WHEN po.splnene THEN 'áno' ELSE 'nie' END AS splnene,
+        cz.kod AS kod_dovod_zrusenia,
+        cz.nazov AS nazov_dovod_zrusenia,
+        cs.kod AS kod_sankcia_opatrenie,
+        cs.nazov AS nazov_sankcia_opatrenie
+    FROM spk.predbezne_opatrenie po
+    INNER JOIN spk.zabezpecenie_konania zk
+        ON po.zabezpecenie_konania_id = zk.zabezpecenie_konania_id
+        AND zk.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k
+        ON zk.spk_konanie_id = k.spk_konanie_id
+        AND k.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.cis_dovod_zrusenia_predbezneho_opatrenia cz
+        ON po.cis_dovod_zrusenia_predbezneho_opatrenia_id = cz.cis_dovod_zrusenia_predbezneho_opatrenia_id
+    LEFT JOIN cis.cis_sankcia_opatrenie cs
+        ON po.cis_sankcia_opatrenie_id = cs.cis_sankcia_opatrenie_id
+    WHERE po.transakcia_zrusene_id IS NULL
+        AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_predvedenie(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_predvedenie(p_ksed_spis_id bigint)
+ RETURNS TABLE(predvedenie_id bigint, datum_a_cas_predvedenia text, policajny_zbor text, lokalita_opis text, katastralne_uzemie text, sidelna_jednotka text, obec text, ulica text, supisne_cislo text, orientacne_cislo text, psc text, jprl text, cislo_parcely text, adresa text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        p.predvedenie_id,
+        TO_CHAR(p.datum_a_cas_predvedenia, 'DD.MM.YYYY HH24:MI') AS datum_a_cas_predvedenia,
+        INITCAP(p.policajny_zbor) AS policajny_zbor,
+        l.lokalita_opis,
+        l.katastralne_uzemie,
+        l.sidelna_jednotka,
+        l.obec::text,
+        l.ulica,
+        l.supisne_cislo,
+        l.orientacne_cislo,
+        l.psc,
+        l.jprl,
+        l.cislo_parcely,
+        l.adresa
+    FROM 
+        spk.predvedenie p
+    LEFT JOIN 
+        artefakt.uni_lokalita l ON l.lokalita_id = p.lokalita_id
+    INNER JOIN 
+        spk.zabezpecenie_konania zk ON zk.zabezpecenie_konania_id = p.zabezpecenie_konania_id AND zk.transakcia_zrusene_id IS NULL
+    INNER JOIN 
+        spk.spk_konanie k ON k.spk_konanie_id = zk.spk_konanie_id AND k.transakcia_zrusene_id IS NULL
+    WHERE 
+        (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id)
+	AND p.transakcia_zrusene_id IS NULL;
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_predvolanie(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_predvolanie(p_ksed_spis_id bigint)
+ RETURNS TABLE(datum_a_cas_predvolania text, datum_a_cas_uskutocnenia_predvolania text, datum_vystavenia text, lokalita_opis text, katastralne_uzemie text, sidelna_jednotka text, obec text, ulica text, supisne_cislo text, orientacne_cislo text, psc text, jprl text, cislo_parcely text, adresa text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        TO_CHAR(p.datum_a_cas_predvolania, 'DD.MM.YYYY HH24:MI') AS datum_a_cas_predvolania,
+        TO_CHAR(p.datum_a_cas_uskutocnenia_predvolania, 'DD.MM.YYYY HH24:MI') AS datum_a_cas_uskutocnenia_predvolania,
+        TO_CHAR(p.datum_vystavenia, 'DD.MM.YYYY') AS datum_vystavenia,
+        l.lokalita_opis,
+        l.katastralne_uzemie,
+        l.sidelna_jednotka,
+        l.obec::text,
+        l.ulica,
+        l.supisne_cislo,
+        l.orientacne_cislo,
+        l.psc,
+        l.jprl,
+        l.cislo_parcely,
+        l.adresa
+    FROM 
+        spk.predvolanie p
+    INNER JOIN 
+        spk.zabezpecenie_konania zk ON zk.zabezpecenie_konania_id = p.zabezpecenie_konania_id AND zk.transakcia_zrusene_id IS NULL
+    INNER JOIN 
+        spk.spk_konanie k ON k.spk_konanie_id = zk.spk_konanie_id AND k.transakcia_zrusene_id IS NULL
+    LEFT JOIN 
+        artefakt.uni_lokalita l ON l.lokalita_id = p.lokalita_id
+    WHERE 
+        (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id)
+	AND p.transakcia_zrusene_id IS NULL;
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_prerusenie_konania(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_prerusenie_konania(p_ksed_spis_id bigint)
+ RETURNS TABLE(datum_ukoncenia_preruseni text, doba_prerusenia bigint, iny_dovod_prerusenia text, prerusenie_do text, prerusenie_od text, dovod_prerusenia_kod text, dovod_prerusenia_nazov text, dovod_ukoncenia_kod text, dovod_ukoncenia_nazov text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        TO_CHAR(pk.datum_ukoncenia_preruseni, 'DD.MM.YYYY') AS datum_ukoncenia_preruseni,
+        pk.doba_prerusenia,
+        pk.iny_dovod_prerusenia,
+        TO_CHAR(pk.prerusenie_do, 'DD.MM.YYYY') AS prerusenie_do,
+        TO_CHAR(pk.prerusenie_od, 'DD.MM.YYYY') AS prerusenie_od,
+        cdp.kod AS dovod_prerusenia_kod,
+        cdp.nazov AS dovod_prerusenia_nazov,
+        cdu.kod AS dovod_ukoncenia_kod,
+        cdu.nazov AS dovod_ukoncenia_nazov
+    FROM spk.prerusenie_konania pk
+    LEFT JOIN cis.cis_dovod_prerusenia_konania cdp 
+        ON cdp.cis_dovod_prerusenia_konania_id = pk.cis_dovod_prerusenia_id
+    LEFT JOIN cis.cis_dovod_ukoncenia_prerusenia cdu 
+        ON cdu.cis_dovod_ukoncenia_prerusenia_id = pk.cis_dovod_ukoncenia_id
+    INNER JOIN spk.spk_konanie k 
+        ON k.spk_konanie_id = pk.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    WHERE 
+        pk.transakcia_zrusene_id IS NULL
+        AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_rozhodnutie(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_rozhodnutie(p_ksed_spis_id bigint)
+ RETURNS TABLE(cislo_rozhodnutia character varying, datum_dorucenia_rozhodnutia text, datum_pravoplatnosti text, datum_vykonatelnosti text, datum_vystavenia text, datum_zrusenia_rozhodnutia text, dorucenie_verejnou_vyhlaskou text, navrh_rozhodnutia text, popis_rozhodnutia text, poucenie text, rozhodnutie_v_ramci_obnovy_konania text, vyrok text, odovodnenie text, povolene_odvolanie text, rozhodnutie_v_odvolani text, typ_rozhodnutia_kod text, typ_rozhodnutia_nazov text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        r.cislo_rozhodnutia,
+        TO_CHAR(r.datum_dorucenia_rozhodnutia, 'DD.MM.YYYY') datum_dorucenia_rozhodnutia,
+        TO_CHAR(r.datum_pravoplatnosti, 'DD.MM.YYYY') datum_pravoplatnosti,
+        TO_CHAR(r.datum_vykonatelnosti, 'DD.MM.YYYY') datum_vykonatelnosti,
+        TO_CHAR(r.datum_vystavenia, 'DD.MM.YYYY') datum_vystavenia,
+        TO_CHAR(r.datum_zrusenia_rozhodnutia, 'DD.MM.YYYY') datum_zrusenia_rozhodnutia,
+        CASE WHEN r.dorucenie_verejnou_vyhlaskou THEN 'áno' ELSE 'nie' END dorucenie_verejnou_vyhlaskou,
+        CASE WHEN r.navrh_rozhodnutia THEN 'áno' ELSE 'nie' END navrh_rozhodnutia,
+        r.popis_rozhodnutia,
+        r.poucenie,
+        CASE WHEN r.rozhodnutie_v_ramci_obnovy_konania THEN 'áno' ELSE 'nie' END rozhodnutie_v_ramci_obnovy_konania,
+        r.vyrok,
+        r.odovodnenie,
+        CASE WHEN r.povolene_odvolanie THEN 'áno' ELSE 'nie' END povolene_odvolanie,
+        CASE WHEN r.rozhodnutie_v_odvolani THEN 'áno' ELSE 'nie' END rozhodnutie_v_odvolani,
+        ctr.kod typ_rozhodnutia_kod,
+        ctr.nazov typ_rozhodnutia_nazov
+    FROM spk.rozhodnutie r
+    INNER JOIN spk.spk_konanie k ON k.spk_konanie_id = r.spk_konanie_id AND k.transakcia_zrusene_id IS NULL
+    LEFT JOIN cis.cis_typ_rozhodnutia ctr ON r.cis_typ_rozhodnutia_id = ctr.cis_typ_rozhodnutia_id AND ctr.transakcia_zrusene_id IS NULL
+    WHERE r.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END $function$
+;
+
+-- DROP FUNCTION artefakt.spk_rozhodnutie_zucastneny_subjekt(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_rozhodnutie_zucastneny_subjekt(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, zucastneny_subjekt_nazov text, zucastneny_subjekt_rola text, zucastneny_subjekt_druh_subjektu text, adresa_typ_adresy text, adresa_obec text, adresa_ulica text, adresa_supisne_cislo text, adresa_orientacne_cislo text, adresa_psc text, adresa_stat text, adresa_subjektu text, ico text, ico_txt text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT DISTINCT
+        k.spk_konanie_id,
+        k.cislo_konania,
+        r.rozhodnutie_id,
+        r.cislo_rozhodnutia,
+        us.zucastneny_subjekt_nazov::text,
+        us.zucastneny_subjekt_rola,
+        us.zucastneny_subjekt_druh_subjektu::text,
+        us.adresa_typ_adresy::text,
+        us.adresa_obec::text,
+        us.adresa_ulica::text,
+        us.adresa_supisne_cislo::text,
+        us.adresa_orientacne_cislo::text,
+        us.adresa_psc::text,
+        us.adresa_stat::text,
+        us.adresa_subjektu::text,
+        us.ico::text,
+        'IČO: ' || COALESCE(us.ico::text, '') AS ico_txt
+    FROM spk.rozhodnutie_zucastneny_subjekt rz
+    INNER JOIN spk.rozhodnutie r ON rz.rozhodnutie_id = r.rozhodnutie_id AND r.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k ON r.spk_konanie_id = k.spk_konanie_id AND k.transakcia_zrusene_id IS NULL
+    INNER JOIN artefakt.uni_zucastneny_subjekt us ON us.zucastneny_subjekt_id = rz.zucastneny_subjekt_id
+    WHERE (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id)
+    AND rz.transakcia_zrusene_id IS NULL;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_sankcia_opatrenie_v_rozhodnuti(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_sankcia_opatrenie_v_rozhodnuti(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, specificky_symbol text, variabilny_symbol text, vyska_sankcie numeric, sankcia_opatrenie text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id,
+        k.cislo_konania,
+        r.rozhodnutie_id,
+        r.cislo_rozhodnutia,
+        sor.specificky_symbol,
+        sor.variabilny_symbol,
+        sor.vyska_sankcie,
+        cso.nazov AS sankcia_opatrenie
+    FROM spk.sankcia_opatrenie_v_rozhodnuti sor
+    INNER JOIN spk.rozhodnutie r
+        ON sor.rozhodnutie_id = r.rozhodnutie_id
+        AND r.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k
+        ON r.spk_konanie_id = k.spk_konanie_id
+        AND k.transakcia_zrusene_id IS NULL
+    INNER JOIN cis.cis_sankcia_opatrenie cso
+        ON sor.cis_sankcia_opatrenie_id = cso.cis_sankcia_opatrenie_id
+        AND cso.transakcia_zrusene_id IS NULL
+    WHERE sor.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_sankcia_pokuta(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_sankcia_pokuta(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, specificky_symbol text, variabilny_symbol text, vyska_sankcie_pokuty numeric)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id,
+        k.cislo_konania,
+        r.rozhodnutie_id,
+        r.cislo_rozhodnutia,
+        sp.specificky_symbol,
+        sp.variabilny_symbol,
+        sp.vyska_sankcie_pokuty
+    FROM spk.sankcia_pokuta sp
+    INNER JOIN spk.skutkova_podstata_v_rozhodnuti svr
+        ON sp.skutkova_podstata_v_rozhodnuti_id = svr.skutkova_podstata_v_rozhodnuti_id
+        AND svr.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.rozhodnutie r
+        ON svr.rozhodnutie_id = r.rozhodnutie_id
+        AND r.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k
+        ON r.spk_konanie_id = k.spk_konanie_id
+        AND k.transakcia_zrusene_id IS NULL
+    WHERE sp.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_skutkova_podstata_v_rozhodnuti(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_skutkova_podstata_v_rozhodnuti(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, zistenie text, skutkova_podstata text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id,
+        k.cislo_konania,
+        r.rozhodnutie_id,
+        r.cislo_rozhodnutia,
+        spvr.zistenie,
+        csp.nazov AS skutkova_podstata
+        --sankcia_opatrenie_v_rozhodnuti_id
+    FROM spk.skutkova_podstata_v_rozhodnuti spvr
+    INNER JOIN spk.rozhodnutie r
+        ON spvr.rozhodnutie_id = r.rozhodnutie_id
+        AND r.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k
+        ON r.spk_konanie_id = k.spk_konanie_id
+        AND k.transakcia_zrusene_id IS NULL
+    INNER JOIN cis.cis_skutkova_podstata csp
+        ON spvr.cis_skutkova_podstata_id = csp.cis_skutkova_podstata_id
+        AND csp.transakcia_zrusene_id IS NULL
+    WHERE spvr.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_spristupnenie_spisu_zucastneny_subjekt(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_spristupnenie_spisu_zucastneny_subjekt(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, datum_spristupnenia_spisu text, zucastneny_subjekt_nazov text, zucastneny_subjekt_rola text, zucastneny_subjekt_druh_subjektu text, adresa_typ_adresy text, adresa_obec text, adresa_ulica text, adresa_supisne_cislo text, adresa_orientacne_cislo text, adresa_psc text, adresa_stat text, adresa_subjektu text, ico text, ico_txt text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT
+        k.spk_konanie_id,
+        k.cislo_konania,
+        TO_CHAR(ss.datum_spristupnenia_spisu, 'DD.MM.YYYY') AS datum_spristupnenia_spisu,
+        us.zucastneny_subjekt_nazov::text,
+        us.zucastneny_subjekt_rola,
+        us.zucastneny_subjekt_druh_subjektu::text,
+        us.adresa_typ_adresy::text,
+        us.adresa_obec::text,
+        us.adresa_ulica::text,
+        us.adresa_supisne_cislo::text,
+        us.adresa_orientacne_cislo::text,
+        us.adresa_psc::text,
+        us.adresa_stat::text,
+        us.adresa_subjektu::text,
+        us.ico::text,
+        'IČO: ' || COALESCE(us.ico::text, '') AS ico_txt
+    FROM spk.spristupnenie_spisu ss
+    INNER JOIN artefakt.uni_zucastneny_subjekt us ON ss.zucastneny_subjekt_id = us.zucastneny_subjekt_id
+    INNER JOIN spk.spk_konanie k ON k.ksed_spis_id = ss.ksed_spis_id AND k.transakcia_zrusene_id IS NULL
+    WHERE p_ksed_spis_id IS NULL OR ss.ksed_spis_id = p_ksed_spis_id;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_trovy_konania(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_trovy_konania(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, cislo_rozhodnutia_o_trovach_konania text, datum_predpisania_trov text, vyska_trov_kod text, vyska_trov_nazov text, popis text, cislo_rozhodnutia text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT
+        k.spk_konanie_id AS spk_konanie_id, 
+        k.cislo_konania AS cislo_konania, 
+        tk.cislo_rozhodnutia_o_trovach_konania,
+        TO_CHAR(tk.datum_predpisania_trov, 'DD.MM.YYYY') AS datum_predpisania_trov,
+        vt.kod AS vyska_trov_kod,
+        vt.nazov AS vyska_trov_nazov,
+        tk.popis,
+		r.cislo_rozhodnutia::text
+    FROM spk.trovy_konania tk
+    INNER JOIN spk.spk_konanie k
+        ON k.spk_konanie_id = tk.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    INNER JOIN cis.cis_vyska_trov_konania vt
+        ON vt.cis_vyska_trov_konania_id = tk.cis_vyska_trov_konania_id  AND vt.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.rozhodnutie r ON k.spk_konanie_id = r.spk_konanie_id AND k.transakcia_zrusene_id IS NULL
+    WHERE tk.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_ustne_pojednavanie(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_ustne_pojednavanie(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, datum_uskutocnenia text, miestnost text, poschodie bigint, sidlo_spravneho_organu_adresa text, verejne_zhromazdenie text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id,
+        k.cislo_konania,
+        TO_CHAR(up.datum_uskutocnenia, 'DD.MM.YYYY') AS datum_uskutocnenia,
+        up.miestnost,
+        up.poschodie,
+        up.sidlo_spravneho_organu_adresa,
+        CASE WHEN up.verejne_zhromazdenie THEN 'áno' ELSE 'nie' END AS verejne_zhromazdenie
+		--lokalita_id
+    FROM spk.ustne_pojednavanie up
+    INNER JOIN spk.zabezpecenie_konania zk
+        ON up.zabezpecenie_konania_id = zk.zabezpecenie_konania_id 
+        AND zk.transakcia_zrusene_id IS NULL
+    INNER JOIN spk.spk_konanie k
+        ON k.spk_konanie_id = zk.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    WHERE 
+        (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id)
+        AND up.transakcia_zrusene_id IS NULL;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_vstupne_dokumenty(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_vstupne_dokumenty(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, dokument_nazov text, typ_vstupneho_dokumentu text, priloha_nazov_suboru text, datum_vytvorenia text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id AS spk_konanie_id, 
+        spk_konanie.cislo_konania AS cislo_konania, 
+        dokument.nazov AS dokument_nazov, 
+        cis_typ_vstupneho_artefaktu.nazov AS typ_vstupneho_dokumentu, 
+        priloha.nazov_suboru AS priloha_nazov_suboru, 
+		TO_CHAR(dokument.datum_vytvorenia, 'DD.MM.YYYY') AS datum_vytvorenia
+    FROM 
+        spk.spk_konanie
+    JOIN 
+        dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id 
+        AND ksed_spis.transakcia_zrusene_id IS NULL 
+    JOIN 
+        dms.dokument 
+        ON ksed_spis.ksed_spis_id = dokument.ksed_spis_id 
+        AND dokument.transakcia_zrusene_id IS NULL 
+    JOIN 
+        dms.vstupny_dokument 
+        ON dokument.dokument_id = vstupny_dokument.vstupny_dokument_id 
+        AND vstupny_dokument.transakcia_zrusene_id IS NULL 
+    JOIN 
+        cis.cis_typ_vstupneho_artefaktu 
+        ON cis_typ_vstupneho_artefaktu.cis_typ_vstupneho_artefaktu_id = vstupny_dokument.cis_typ_vstupneho_artefaktu_id 
+        AND cis_typ_vstupneho_artefaktu.transakcia_zrusene_id IS NULL 
+    LEFT JOIN 
+        dms.priloha 
+        ON dokument.dokument_id = priloha.dokument_id 
+        AND priloha.transakcia_zrusene_id IS NULL 
+    WHERE 
+        spk_konanie.transakcia_zrusene_id IS NULL 
+        AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+    ORDER BY 
+        dokument.datum_vytvorenia, 
+        cis_typ_vstupneho_artefaktu.nazov;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_vyjadrenie_ucastnikov_vstupny_dokument(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_vyjadrenie_ucastnikov_vstupny_dokument(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, dokument_nazov text, typ_vstupneho_dokumentu text, priloha_nazov_suboru text, datum_vytvorenia text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        rozhodnutie.rozhodnutie_id,
+        rozhodnutie.cislo_rozhodnutia,
+        dokument.nazov,
+        cis_typ_vstupneho_artefaktu.nazov,
+        priloha.nazov_suboru,
+        TO_CHAR(dokument.datum_vytvorenia, 'DD.MM.YYYY')
+    FROM spk.vyjadrenie_ucastnikov vu
+    JOIN spk.vyjadrenie_ucastnikov_vstupny_dokument vuvd 
+        ON vuvd.vyjadrenie_ucastnikov_id = vu.vyjadrenie_ucastnikov_id
+        AND vuvd.vyjadrenie_ucastnikov_vstupny_dokument_id IS NOT NULL
+    JOIN spk.odvolanie_voci_rozhodnutiu ovr 
+        ON ovr.odvolanie_voci_rozhodnutiu_id = vu.odvolanie_voci_rozhodnutiu_id
+        AND ovr.transakcia_zrusene_id IS NULL
+    JOIN spk.rozhodnutie 
+        ON rozhodnutie.rozhodnutie_id = ovr.rozhodnutie_id
+        AND rozhodnutie.transakcia_zrusene_id IS NULL
+    JOIN spk.spk_konanie 
+        ON spk_konanie.spk_konanie_id = rozhodnutie.spk_konanie_id
+        AND spk_konanie.transakcia_zrusene_id IS NULL
+    JOIN dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id
+        AND ksed_spis.transakcia_zrusene_id IS NULL
+    JOIN dms.vstupny_dokument 
+        ON vstupny_dokument.vstupny_dokument_id = vuvd.vstupny_dokument_id
+        AND vstupny_dokument.transakcia_zrusene_id IS NULL
+    JOIN dms.dokument 
+        ON dokument.dokument_id = vstupny_dokument.vstupny_dokument_id
+        AND dokument.transakcia_zrusene_id IS NULL
+    JOIN cis.cis_typ_vstupneho_artefaktu 
+        ON cis_typ_vstupneho_artefaktu.cis_typ_vstupneho_artefaktu_id = vstupny_dokument.cis_typ_vstupneho_artefaktu_id
+        AND cis_typ_vstupneho_artefaktu.transakcia_zrusene_id IS NULL
+    LEFT JOIN dms.priloha 
+        ON priloha.dokument_id = dokument.dokument_id
+        AND priloha.transakcia_zrusene_id IS NULL
+    WHERE 
+        vu.vyjadrenie_ucastnikov_id IS NOT NULL
+        AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+    ORDER BY dokument.datum_vytvorenia, cis_typ_vstupneho_artefaktu.nazov;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_vylucenie_zamestnanca(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_vylucenie_zamestnanca(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, datum_vylucenia text, dovod_vylucenia text, vyluceny boolean, pracovnik text, org_zlozka_nazov character varying, typ_funkcie_nazov character varying)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        k.spk_konanie_id AS spk_konanie_id, 
+        k.cislo_konania AS cislo_konania, 
+        TO_CHAR(vz.datum_vylucenia, 'DD.MM.YYYY') AS datum_vylucenia,
+        vz.dovod_vylucenia,
+        vz.vyluceny,
+        uni_pracovnik.pracovnik,
+        uni_pracovnik.org_zlozka_nazov AS org_zlozka_nazov,
+        uni_pracovnik.typ_funkcie_nazov AS typ_funkcie_nazov
+    FROM spk.vylucenie_zamestnanca vz
+    INNER JOIN spk.spk_konanie k
+        ON k.spk_konanie_id = vz.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    INNER JOIN artefakt.uni_pracovnik
+        ON vz.pracovnik_id = uni_pracovnik.pracovnik_id
+    WHERE vz.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_vystupne_dokumenty(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_vystupne_dokumenty(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, dokument_nazov text, typ_vystupneho_dokumentu text, priloha_nazov_suboru text, datum_vytvorenia text, datum_odoslania_do_reg text, datum_dorucenia text, kod text, cislo_registraturneho_zaznamu_originalu text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id AS spk_konanie_id, 
+        spk_konanie.cislo_konania AS cislo_konania, 
+        dokument.nazov AS dokument_nazov, 
+        cis_typ_vystupneho_artefaktu.nazov::text AS typ_vystupneho_dokumentu, 
+        priloha.nazov_suboru AS priloha_nazov_suboru, 
+		TO_CHAR(dokument.datum_vytvorenia, 'DD.MM.YYYY') AS datum_vytvorenia,
+		TO_CHAR(vystupny_dokument.datum_odoslania_do_reg, 'DD.MM.YYYY') AS datum_odoslania_do_reg,
+		TO_CHAR(vystupny_dokument.datum_dorucenia, 'DD.MM.YYYY') AS datum_dorucenia,
+		cis_typ_vystupneho_artefaktu.kod::text,
+		dokument.cislo_registraturneho_zaznamu_originalu
+    FROM 
+        spk.spk_konanie
+    JOIN 
+        dms.ksed_spis 
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id 
+        AND ksed_spis.transakcia_zrusene_id IS NULL 
+    JOIN 
+        dms.dokument 
+        ON ksed_spis.ksed_spis_id = dokument.ksed_spis_id 
+        AND dokument.transakcia_zrusene_id IS NULL 
+    JOIN 
+        dms.vystupny_dokument 
+        ON dokument.dokument_id = vystupny_dokument.vystupny_dokument_id 
+        AND vystupny_dokument.transakcia_zrusene_id IS NULL 
+    JOIN 
+        cis.cis_typ_vystupneho_artefaktu 
+        ON cis_typ_vystupneho_artefaktu.cis_typ_vystupneho_artefaktu_id = vystupny_dokument.cis_typ_vystupneho_artefaktu_id
+        AND cis_typ_vystupneho_artefaktu.transakcia_zrusene_id IS NULL 
+    LEFT JOIN 
+        dms.priloha 
+        ON dokument.dokument_id = priloha.dokument_id 
+        AND priloha.transakcia_zrusene_id IS NULL 
+    WHERE 
+        spk_konanie.transakcia_zrusene_id IS NULL 
+        AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+    ORDER BY 
+        dokument.datum_vytvorenia, 
+        cis_typ_vystupneho_artefaktu.nazov;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_zabezpecenie_konania(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_zabezpecenie_konania(p_ksed_spis_id bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, procesny_ukon_nazov text, procesny_ukon_popis text, znenie text, datum_zrusenia text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT
+        k.spk_konanie_id,
+        k.cislo_konania,
+        zk.procesny_ukon_nazov,
+        zk.procesny_ukon_popis,
+        zk.znenie,
+        TO_CHAR(zk.datum_zrusenia, 'DD.MM.YYYY') AS datum_zrusenia
+        --zk.zucastneny_subjekt_id
+    FROM spk.zabezpecenie_konania zk
+    INNER JOIN spk.spk_konanie k
+        ON k.spk_konanie_id = zk.spk_konanie_id 
+        AND k.transakcia_zrusene_id IS NULL
+    WHERE zk.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR k.ksed_spis_id = p_ksed_spis_id);
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_zaloba_rozhodnutie_vystupny_dokument(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_zaloba_rozhodnutie_vystupny_dokument(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, rozhodnutie_id bigint, cislo_rozhodnutia character varying, dokument_nazov text, typ_vystupneho_dokumentu text, priloha_nazov_suboru text, datum_vytvorenia text, datum_podania text, poznamka text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        rozhodnutie.rozhodnutie_id,
+        rozhodnutie.cislo_rozhodnutia,
+        dokument.nazov,
+        cis_typ_vystupneho_artefaktu.nazov::text,
+        priloha.nazov_suboru,
+        TO_CHAR(dokument.datum_vytvorenia, 'DD.MM.YYYY') datum_vytvorenia,
+		TO_CHAR(zaloba.datum_podania, 'DD.MM.YYYY') datum_podania,
+        zaloba.poznamka
+    FROM spk.zaloba
+    JOIN spk.rozhodnutie
+        ON rozhodnutie.rozhodnutie_id = zaloba.rozhodnutie_id
+        AND rozhodnutie.transakcia_zrusene_id IS NULL
+    JOIN spk.spk_konanie
+        ON spk_konanie.spk_konanie_id = rozhodnutie.spk_konanie_id
+        AND spk_konanie.transakcia_zrusene_id IS NULL
+    JOIN dms.ksed_spis
+        ON ksed_spis.ksed_spis_id = spk_konanie.ksed_spis_id
+        AND ksed_spis.transakcia_zrusene_id IS NULL
+    JOIN dms.vystupny_dokument
+        ON vystupny_dokument.vystupny_dokument_id = zaloba.vystupny_dokument_id
+        AND vystupny_dokument.transakcia_zrusene_id IS NULL
+    JOIN dms.dokument
+        ON dokument.dokument_id = vystupny_dokument.vystupny_dokument_id
+        AND dokument.transakcia_zrusene_id IS NULL
+    JOIN cis.cis_typ_vystupneho_artefaktu
+        ON cis_typ_vystupneho_artefaktu.cis_typ_vystupneho_artefaktu_id = vystupny_dokument.cis_typ_vystupneho_artefaktu_id
+        AND cis_typ_vystupneho_artefaktu.transakcia_zrusene_id IS NULL
+    LEFT JOIN dms.priloha
+        ON priloha.dokument_id = dokument.dokument_id
+        AND priloha.transakcia_zrusene_id IS NULL
+    WHERE zaloba.transakcia_zrusene_id IS NULL
+      AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+    ORDER BY dokument.datum_vytvorenia, cis_typ_vystupneho_artefaktu.nazov;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_zoznam_pracovnikov(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_zoznam_pracovnikov(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, cislo_konania text, pracovnik text, org_zlozka_nazov character varying, typ_funkcie_nazov character varying)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        spk_konanie.spk_konanie_id,
+        spk_konanie.cislo_konania,
+        uni_pracovnik.pracovnik,
+        uni_pracovnik.org_zlozka_nazov AS org_zlozka_nazov,
+        uni_pracovnik.typ_funkcie_nazov AS typ_funkcie_nazov
+    FROM 
+        spk.spk_konanie
+    INNER JOIN spk.spk_konanie_pracovnik
+        ON spk_konanie.spk_konanie_id = spk_konanie_pracovnik.spk_konanie_id
+    INNER JOIN artefakt.uni_pracovnik
+        ON spk_konanie_pracovnik.pracovnik_id = uni_pracovnik.pracovnik_id
+       WHERE 
+        (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+        AND spk_konanie.transakcia_zrusene_id IS NULL
+;
+END;
+$function$
+;
+
+-- DROP FUNCTION artefakt.spk_zucastneny_subjekt(int8);
+
+CREATE OR REPLACE FUNCTION artefakt.spk_zucastneny_subjekt(p_ksed_spis_id bigint DEFAULT NULL::bigint)
+ RETURNS TABLE(spk_konanie_id bigint, zucastneny_subjekt_nazov text, zucastneny_subjekt_rola text, zucastneny_subjekt_druh_subjektu text, adresa_typ_adresy text, adresa_obec text, adresa_ulica text, adresa_supisne_cislo text, adresa_orientacne_cislo text, adresa_psc text, adresa_stat text, adresa_subjektu text, ico text, ico_txt text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+    RETURN QUERY
+SELECT DISTINCT
+        spk_konanie.spk_konanie_id AS spk_konanie_id,
+        uni_zucastneny_subjekt.zucastneny_subjekt_nazov::text,
+        uni_zucastneny_subjekt.zucastneny_subjekt_rola,
+        uni_zucastneny_subjekt.zucastneny_subjekt_druh_subjektu::text,
+        uni_zucastneny_subjekt.adresa_typ_adresy::text,
+        uni_zucastneny_subjekt.adresa_obec::text,
+        uni_zucastneny_subjekt.adresa_ulica::text,
+        uni_zucastneny_subjekt.adresa_supisne_cislo::text,
+        uni_zucastneny_subjekt.adresa_orientacne_cislo::text,
+        uni_zucastneny_subjekt.adresa_psc::text,
+        uni_zucastneny_subjekt.adresa_stat::text,
+        uni_zucastneny_subjekt.adresa_subjektu::text,
+        uni_zucastneny_subjekt.ico::text,
+        'IČO: ' || COALESCE(uni_zucastneny_subjekt.ico::text, '') as ico_txt
+FROM 
+    spk.spk_konanie spk_konanie
+INNER JOIN 
+     artefakt.uni_zucastneny_subjekt
+    ON spk_konanie.spk_konanie_id = uni_zucastneny_subjekt.spk_konanie_id
+WHERE 
+    spk_konanie.transakcia_zrusene_id IS NULL
+    AND (p_ksed_spis_id IS NULL OR spk_konanie.ksed_spis_id = p_ksed_spis_id)
+ORDER BY 
+    spk_konanie.spk_konanie_id;
+END;
+$function$
+;
